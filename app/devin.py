@@ -107,7 +107,7 @@ def _post(path: str, body: dict) -> dict:
 
 def list_playbooks() -> list:
     data = _get(f"/organizations/{ORG_ID}/playbooks")
-    return data.get("playbooks") or data.get("items") or []
+    return data.get("items") or data.get("playbooks") or []
 
 def create_playbook() -> str:
     data = _post(f"/organizations/{ORG_ID}/playbooks", {
@@ -122,7 +122,7 @@ def create_playbook() -> str:
 
 def list_knowledge() -> list:
     data = _get(f"/organizations/{ORG_ID}/knowledge/notes")
-    return data.get("notes") or data.get("items") or []
+    return data.get("items") or data.get("notes") or []
 
 def create_knowledge() -> str:
     data = _post(f"/organizations/{ORG_ID}/knowledge/notes", {
@@ -138,7 +138,7 @@ def create_knowledge() -> str:
 
 def list_schedules() -> list:
     data = _get(f"/organizations/{ORG_ID}/schedules")
-    return data.get("schedules") or data.get("items") or []
+    return data.get("items") or data.get("schedules") or []
 
 def create_schedule(playbook_id: str) -> str:
     data = _post(f"/organizations/{ORG_ID}/schedules", {
@@ -148,7 +148,7 @@ def create_schedule(playbook_id: str) -> str:
         "playbook_id": playbook_id,
         "tags":        ["security-scan", "automated", "weekly"],
     })
-    return data.get("schedule_id") or data.get("id")
+    return data.get("scheduled_session_id") or data.get("schedule_id") or data.get("id")
 
 
 # ── Sessions ──────────────────────────────────────────────────────────────────

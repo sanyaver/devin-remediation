@@ -59,7 +59,8 @@ def setup_devin() -> dict:
             existing = [s for s in list_schedules()
                         if s.get("name") == SCHEDULE_NAME]
             if existing:
-                schedule_id = existing[0].get("schedule_id") or existing[0].get("id")
+                schedule_id = (existing[0].get("scheduled_session_id")
+                               or existing[0].get("schedule_id") or existing[0].get("id"))
                 log.info(f"Schedule already exists: {schedule_id}")
             else:
                 schedule_id = create_schedule(playbook_id or "")
