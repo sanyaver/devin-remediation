@@ -191,37 +191,47 @@ async def api_config():
 @app.get("/dashboard", response_class=HTMLResponse)
 async def dashboard():
     sessions     = get_all_sessions()
-    config       = get_setup_config() or {}
     total        = len(sessions)
     completed    = sum(1 for s in sessions if s["status"] == "completed")
     running      = sum(1 for s in sessions if s["status"] == "dispatched")
     needs_review = sum(1 for s in sessions if s["status"] == "needs_review")
     prs_opened   = sum(1 for s in sessions if s.get("pr_url"))
-
-    playbook_id  = config.get("playbook_id", "—")
-    schedule_id  = config.get("schedule_id", "—")
     next_scan    = _next_monday_6am()
+
+    # Devin analytics API — best-effort, 30-day window
+    now = int(time.time())
+    try:
+        metrics      = get_org_metrics(now - 30 * 86400, now)
+        sm           = metrics.get("sessions") or {}
+        pm           = metrics.get("prs") or {}
+        api_sessions = sm.get("sessions_created_count", "—")
+        api_prs      = pm.get("prs_created_count", "—")
+        api_merged   = pm.get("prs_merged_count", "—")
+        avg_acus_raw = sm.get("avg_acus_per_session")
+        avg_acus     = f"{avg_acus_raw:.1f}" if isinstance(avg_acus_raw, (int, float)) else "—"
+    except Exception:
+        api_sessions = api_prs = api_merged = avg_acus = "—"
 
     rows = ""
     for s in sessions:
         cat_label, cat_color = _category_from_title(s.get("issue_title", ""))
         status     = s["status"]
-        status_map = {
-            "completed":    ('<span class="badge badge-green">Remediated</span>', ),
-            "dispatched":   ('<span class="badge badge-yellow">Running</span>', ),
-            "needs_review": ('<span class="badge badge-red">Needs Review</span>', ),
+        status_badges = {
+            "completed":    '<span class="badge badge-green">Remediated</span>',
+            "dispatched":   '<span class="badge badge-yellow">Running</span>',
+            "needs_review": '<span class="badge badge-red">Needs Review</span>',
         }
-        status_badge = status_map.get(status, (f'<span class="badge badge-gray">{status}</span>',))[0]
+        status_badge = status_badges.get(status, f'<span class="badge badge-gray">{status}</span>')
         pr_cell  = (f'<a href="{s["pr_url"]}" target="_blank" class="link">View PR →</a>'
                     if s.get("pr_url") else '<span class="muted">—</span>')
-        duration = _format_duration(s.get("duration_seconds"))
+        duration  = _format_duration(s.get("duration_seconds"))
         triggered = s["triggered_at"][:16].replace("T", " ") if s.get("triggered_at") else "—"
 
         rows += f"""
         <tr>
           <td><span class="issue-num">#{s['issue_number']}</span></td>
           <td><span class="cat-badge" style="background:{cat_color}22;color:{cat_color};border:1px solid {cat_color}44">{cat_label}</span></td>
-          <td class="title-cell">{s['issue_title'][:55]}</td>
+          <td class="title-cell">{s['issue_title'][:60]}</td>
           <td>{status_badge}</td>
           <td><a href="{s['devin_url']}" target="_blank" class="link">Session →</a></td>
           <td>{pr_cell}</td>
@@ -383,29 +393,38 @@ async def dashboard():
     display: inline-block;
   }}
 
-  /* ── Footer cards ── */
-  .footer-grid {{
-    display: grid; grid-template-columns: 1fr 1fr;
-    gap: 12px;
-  }}
-  .info-card {{
+  /* ── Analytics strip ── */
+  .analytics-strip {{
     background: #0d0e11;
     border: 1px solid #1e2130;
     border-radius: 12px;
-    padding: 16px 20px;
+    padding: 18px 24px;
   }}
-  .info-card .card-title {{
-    font-size: 11px; font-weight: 600;
-    color: #64748b; text-transform: uppercase;
-    letter-spacing: .05em; margin-bottom: 10px;
+  .strip-label {{
+    font-size: 10px; font-weight: 600;
+    color: #475569; text-transform: uppercase;
+    letter-spacing: .06em; margin-bottom: 14px;
   }}
-  .info-row {{
-    display: flex; justify-content: space-between;
-    font-size: 12px; color: #94a3b8;
-    padding: 4px 0; border-bottom: 1px solid #111318;
+  .strip-stats {{
+    display: flex; align-items: center; gap: 0;
+    margin-bottom: 14px;
   }}
-  .info-row:last-child {{ border-bottom: none; }}
-  .info-row .info-val {{ color: #e2e8f0; font-family: ui-monospace, monospace; font-size: 11px; }}
+  .strip-stat {{ flex: 1; }}
+  .strip-val {{ font-size: 22px; font-weight: 700; color: #f1f5f9; line-height: 1; }}
+  .strip-key {{ font-size: 11px; color: #64748b; margin-top: 3px; }}
+  .strip-divider {{
+    width: 1px; height: 36px;
+    background: #1e2130; margin: 0 24px; flex-shrink: 0;
+  }}
+  .strip-meta {{
+    font-size: 11px; color: #475569;
+    border-top: 1px solid #1e2130; padding-top: 12px;
+  }}
+  .strip-meta code {{
+    font-family: ui-monospace, monospace;
+    color: #94a3b8; font-size: 11px;
+    background: #1a1d24; padding: 1px 5px; border-radius: 3px;
+  }}
 </style>
 </head>
 <body>
@@ -494,45 +513,35 @@ async def dashboard():
     </table>
   </div>
 
-  <!-- Footer cards -->
-  <div class="footer-grid">
-    <div class="info-card">
-      <div class="card-title">Pipeline Configuration</div>
-      <div class="info-row">
-        <span>Playbook</span>
-        <span class="info-val">!remediate · {playbook_id[:24] if playbook_id and playbook_id != '—' else '—'}…</span>
+  <!-- Analytics strip (Devin API) -->
+  <div class="analytics-strip">
+    <div class="strip-label">Devin API · 30-day analytics</div>
+    <div class="strip-stats">
+      <div class="strip-stat">
+        <div class="strip-val">{api_sessions}</div>
+        <div class="strip-key">Sessions via API</div>
       </div>
-      <div class="info-row">
-        <span>Knowledge</span>
-        <span class="info-val">superset-codebase-context</span>
+      <div class="strip-divider"></div>
+      <div class="strip-stat">
+        <div class="strip-val">{api_prs}</div>
+        <div class="strip-key">PRs created</div>
       </div>
-      <div class="info-row">
-        <span>Schedule</span>
-        <span class="info-val">Weekly · Mon 06:00 UTC</span>
+      <div class="strip-divider"></div>
+      <div class="strip-stat">
+        <div class="strip-val">{api_merged}</div>
+        <div class="strip-key">PRs merged</div>
       </div>
-      <div class="info-row">
-        <span>Trigger</span>
-        <span class="info-val">Webhook · /webhook/scan</span>
+      <div class="strip-divider"></div>
+      <div class="strip-stat">
+        <div class="strip-val">{avg_acus}</div>
+        <div class="strip-key">Avg ACUs / session</div>
       </div>
     </div>
-    <div class="info-card">
-      <div class="card-title">Devin API</div>
-      <div class="info-row">
-        <span>API version</span>
-        <span class="info-val">v3 · org-scoped</span>
-      </div>
-      <div class="info-row">
-        <span>Sessions endpoint</span>
-        <span class="info-val">/organizations/{{org}}/sessions</span>
-      </div>
-      <div class="info-row">
-        <span>Analytics</span>
-        <span class="info-val"><a href="/api/metrics" target="_blank" class="link">View metrics →</a></span>
-      </div>
-      <div class="info-row">
-        <span>Config</span>
-        <span class="info-val"><a href="/api/config" target="_blank" class="link">View IDs →</a></span>
-      </div>
+    <div class="strip-meta">
+      Playbook&nbsp;<code>!remediate</code>&nbsp;·&nbsp;
+      Knowledge&nbsp;<code>superset-codebase-context</code>&nbsp;·&nbsp;
+      Schedule&nbsp;<code>Mon 06:00 UTC</code>&nbsp;·&nbsp;
+      API&nbsp;<code>v3&nbsp;org-scoped</code>
     </div>
   </div>
 
