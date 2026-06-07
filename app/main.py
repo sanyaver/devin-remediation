@@ -157,14 +157,12 @@ async def receive_scan(request: Request):
 
 @app.post("/scan/trigger")
 async def trigger_scan():
-    """Demo trigger — fires all four issues through the scan webhook."""
+    """Demo trigger — fires the new security finding (issue #7).
+    Issues 1-3 are already remediated and shown as historical results."""
     async with httpx.AsyncClient() as client:
         r = await client.post(
             "http://localhost:8000/webhook/scan",
             json={"findings": [
-                {"issue_number": 1},
-                {"issue_number": 2},
-                {"issue_number": 3},
                 {"issue_number": 7},
             ]},
             timeout=30,
