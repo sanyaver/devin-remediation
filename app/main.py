@@ -207,10 +207,11 @@ async def dashboard():
         api_sessions = sm.get("sessions_created_count", "—")
         api_prs      = pm.get("prs_created_count", "—")
         api_merged   = pm.get("prs_merged_count", "—")
-        avg_acus_raw = sm.get("avg_acus_per_session")
-        avg_acus     = f"{avg_acus_raw:.1f}" if isinstance(avg_acus_raw, (int, float)) else "—"
+        origin       = sm.get("sessions_created_by_origin") or {}
+        total_s      = sm.get("sessions_created_count") or 1
+        api_pct      = f"{int(origin.get('api', 0) / total_s * 100)}%" if total_s else "—"
     except Exception:
-        api_sessions = api_prs = api_merged = avg_acus = "—"
+        api_sessions = api_prs = api_merged = api_pct = "—"
 
     rows = ""
     for s in sessions:
@@ -531,8 +532,8 @@ async def dashboard():
       </div>
       <div class="strip-divider"></div>
       <div class="strip-stat">
-        <div class="strip-val">{avg_acus}</div>
-        <div class="strip-key">Avg ACUs / session</div>
+        <div class="strip-val">{api_pct}</div>
+        <div class="strip-key">API-triggered</div>
       </div>
     </div>
     <div class="strip-meta">
