@@ -1,27 +1,101 @@
-# Devin Autonomous Security Remediation
+# Devin Autonomous Remediation Pipeline
 
-Event-driven pipeline that automatically dispatches Devin to remediate
-security findings, producing pull requests with zero human involvement.
+Event-driven system that receives security scan findings as webhook events,
+dispatches parallel Devin sessions — one per issue — and delivers pull requests
+with zero engineer involvement.
 
-## How it works
+Built against the [Apache Superset](https://github.com/sanyaver/superset) fork
+as a demonstration of autonomous code health automation.
 
-1. A security scan fires (simulated or real webhook)
-2. The orchestrator builds a structured Playbook-style prompt per finding
-3. Parallel Devin sessions are dispatched — one per issue
-4. Each session reads the repo, makes changes, runs tests, opens a PR
-5. Results are tracked and displayed on a live dashboard
+---
+
+## Architecture
+
+```
+Security scanner / webhook trigger
+          │
+          ▼
+POST /webhook/scan  ◄──────────────────────────────────────────┐
+          │                                                     │
+          │  For each finding:                                  │
+          │  1. Fetch GitHub issue (title + body)               │
+          │  2. Build structured prompt                         │
+          │  3. Attach org Playbook  (!remediate)               │
+          │  4. Attach Knowledge     (superset-codebase-context)│
+          │  5. Create Devin session (v3 API, org-scoped)       │
+          │  6. Post "dispatched" comment to GitHub issue       │
+          │  7. Spawn async poll loop                           │
+          ▼
+    Devin session  ──►  clone repo  ──►  fix code  ──►  run tests  ──►  open PR
+          │
+          │  Every 30s: GET /organizations/{org}/sessions/{id}
+          │  On PR detected:
+          │    - Update DB → completed
+          │    - Post "PR ready" comment to GitHub issue
+          │    - Trigger session insights generation
+          ▼
+   SQLite DB  ──►  Dashboard  ──►  /api/metrics (Devin analytics API)
+```
+
+**Key Devin primitives used:**
+- **Sessions** — v3 org-scoped API (`/organizations/{org}/sessions`)
+- **Playbook** — `!remediate` standard procedure, attached to every session
+- **Knowledge** — `superset-codebase-context`, auto-retrieved by Devin when relevant
+- **Schedule** — weekly scan every Monday 06:00 UTC, created via API on startup
+- **Session insights** — generated post-completion for task categorisation
+- **Metrics API** — `/organizations/{org}/metrics/sessions` + `/metrics/prs`
+
+---
+
+## Issues remediated
+
+| # | Category | Issue | PR |
+|---|---|---|---|
+| [#1](https://github.com/sanyaver/superset/issues/1) | BUG | `extract_column_dtype()` misclassifies boolean columns as STRING | [PR #6](https://github.com/sanyaver/superset/pull/6) |
+| [#2](https://github.com/sanyaver/superset/issues/2) | TEST | `find_duplicates`, `remove_duplicates` etc. have no test coverage | [PR #4](https://github.com/sanyaver/superset/pull/4) |
+| [#3](https://github.com/sanyaver/superset/issues/3) | PERF | `get_time_grain_expressions()` recomputes on every chart request | [PR #5](https://github.com/sanyaver/superset/pull/5) |
+| [#7](https://github.com/sanyaver/superset/issues/7) | SECURITY | `bleach` pinned to vulnerable version — upgrade to 6.x | pending |
+
+---
 
 ## Run it
 
 ```bash
 cp .env.example .env
-# Fill in your keys, then:
+# Fill in DEVIN_API_KEY, DEVIN_ORG_ID, GITHUB_TOKEN, GITHUB_REPO
 docker compose up
 ```
 
-Open dashboard: http://localhost:8000/dashboard
+| Endpoint | Description |
+|---|---|
+| `http://localhost:8000/dashboard` | Live remediation dashboard |
+| `POST /scan/trigger` | Fire all four issues through the pipeline |
+| `POST /webhook/scan` | Real webhook — body: `{"findings": [{"issue_number": N}]}` |
+| `GET /api/sessions` | Raw session data (JSON) |
+| `GET /api/metrics` | Devin org-level analytics (30-day window) |
+| `GET /api/config` | Playbook / knowledge / schedule IDs |
+| `GET /health` | Liveness check |
 
-Trigger the demo scan:
-```bash
-curl -X POST http://localhost:8000/scan/trigger
-```
+---
+
+## Environment variables
+
+| Variable | Description |
+|---|---|
+| `DEVIN_API_KEY` | Devin service user API key (`cog_…`) |
+| `DEVIN_ORG_ID` | Devin organisation ID (`org-…`) |
+| `GITHUB_TOKEN` | GitHub personal access token |
+| `GITHUB_REPO` | Target repo in `owner/repo` format |
+| `DB_PATH` | SQLite path (default: `/app/data/sessions.db`) |
+
+---
+
+## Startup behaviour
+
+On first boot the app calls `setup_devin()` which:
+1. Creates the `!remediate` **playbook** in your Devin org (or finds it if it already exists)
+2. Creates the `superset-codebase-context` **knowledge note** (or finds it if it exists)
+3. Creates a **weekly schedule** (Monday 06:00 UTC) that scans for new findings
+
+IDs are persisted to the local SQLite DB — subsequent restarts skip the API calls.
+The app starts and serves `/health` successfully even if Devin credentials are invalid.
