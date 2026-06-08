@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Autonomous Remediation Pipeline — Devin</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: #080d1a;
+    color: #e2e8f0;
+    height: 100vh;
+    overflow: hidden;
+    user-select: none;
+  }
+  .deck { width: 100%; height: 100vh; position: relative; }
+  .slide {
+    display: none; width: 100%; height: 100vh;
+    padding: 44px 64px;
+    flex-direction: column; justify-content: flex-start;
+    position: absolute; top: 0; left: 0;
+    overflow: hidden;
+  }
+  .slide.active { display: flex; }
+
+  /* nav */
+  .nav { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); display: flex; gap: 8px; z-index: 100; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: #334155; cursor: pointer; transition: background .2s; }
+  .dot.active { background: #7c3aed; }
+  .counter { position: fixed; bottom: 24px; right: 40px; font-size: 11px; color: #475569; }
+
+  /* type */
+  .eyebrow { font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #7c3aed; margin-bottom: 10px; }
+  h2 { font-size: 28px; font-weight: 700; color: #f8fafc; margin-bottom: 20px; }
+  .mono { font-family: "SF Mono","Fira Code",monospace; }
+
+  /* ── ARCHITECTURE SLIDE layout ── */
+  .arch-grid {
+    display: grid;
+    grid-template-rows: auto auto auto;
+    gap: 14px;
+    flex: 1;
+  }
+
+  /* row 1: pipeline flow */
+  .flow {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    background: #111827;
+    border: 1px solid #1e293b;
+    border-radius: 12px;
+    padding: 16px 24px;
+  }
+  .flow-box {
+    text-align: center;
+    flex: 1;
+  }
+  .flow-label { font-size: 9px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: #475569; margin-bottom: 3px; }
+  .flow-name  { font-size: 13px; font-weight: 600; color: #f1f5f9; }
+  .flow-sub   { font-size: 11px; color: #64748b; margin-top: 2px; }
+  .flow-arrow { color: #334155; font-size: 18px; padding: 0 10px; flex-shrink: 0; }
+  .flow-box.devin-box .flow-name { color: #a78bfa; }
+  .flow-box.devin-box .flow-label { color: #7c3aed; }
+
+  /* row 2: primitives */
+  .primitives {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr 1fr;
+    gap: 10px;
+  }
+  .prim {
+    background: #111827;
+    border: 1px solid #1e293b;
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .prim-name {
+    font-size: 10px; font-weight: 800; letter-spacing: .1em;
+    text-transform: uppercase; color: #7c3aed; margin-bottom: 6px;
+  }
+  .prim-tag {
+    display: inline-block;
+    font-family: "SF Mono","Fira Code",monospace;
+    font-size: 10px; background: #0f172a; border: 1px solid #1e293b;
+    border-radius: 4px; padding: 1px 6px; color: #a78bfa; margin-bottom: 8px;
+  }
+  .prim p { font-size: 12px; color: #94a3b8; line-height: 1.5; }
+  .prim strong { color: #f1f5f9; font-weight: 600; }
+
+  /* row 3: bottom strip */
+  .bottom-strip {
+    display: grid;
+    grid-template-columns: 1.2fr 1fr 1fr;
+    gap: 10px;
+  }
+  .strip-card {
+    background: #111827;
+    border: 1px solid #1e293b;
+    border-radius: 10px;
+    padding: 14px 18px;
+  }
+  .strip-title { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; margin-bottom: 6px; }
+  .strip-card p { font-size: 12px; color: #94a3b8; line-height: 1.5; }
+  .strip-card strong { color: #f1f5f9; font-weight: 600; }
+
+  .loop-steps {
+    display: flex; gap: 0; align-items: center; margin-top: 8px;
+  }
+  .loop-step {
+    background: #0f172a; border: 1px solid #334155; border-radius: 6px;
+    padding: 5px 10px; font-size: 11px; font-weight: 600; color: #a78bfa;
+    white-space: nowrap;
+  }
+  .loop-arrow { color: #334155; padding: 0 5px; font-size: 14px; }
+
+  /* ── NEXT STEPS SLIDE ── */
+  .steps { display: flex; flex-direction: column; gap: 14px; flex: 1; }
+  .step {
+    display: flex; gap: 20px; align-items: flex-start;
+    background: #111827; border: 1px solid #1e293b; border-radius: 10px; padding: 18px 22px;
+  }
+  .step-num { font-size: 26px; font-weight: 800; color: #1e293b; line-height: 1; flex-shrink: 0; width: 32px; }
+  .step-title { font-size: 15px; font-weight: 600; color: #f1f5f9; margin-bottom: 4px; }
+  .step-body  { font-size: 13px; color: #94a3b8; line-height: 1.55; }
+
+  .tag-green  { color: #10b981; }
+  .tag-blue   { color: #3b82f6; }
+  .tag-purple { color: #a78bfa; }
+  .tag-orange { color: #f97316; }
+  .tag-red    { color: #ef4444; }
+</style>
+</head>
+<body>
+<div class="deck" id="deck">
+
+  <!-- ══════════════════════════════════════════════════════════
+       SLIDE 1 — Heavy Architecture
+  ═══════════════════════════════════════════════════════════════ -->
+  <div class="slide active">
+    <div class="eyebrow">Architecture</div>
+    <h2 style="margin-bottom:14px;">How the pipeline works</h2>
+
+    <div class="arch-grid">
+
+      <!-- ROW 1: Flow -->
+      <div class="flow">
+        <div class="flow-box">
+          <div class="flow-label">Trigger</div>
+          <div class="flow-name">Security Scanner</div>
+          <div class="flow-sub">Snyk / Dependabot / custom</div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-box">
+          <div class="flow-label">Webhook</div>
+          <div class="flow-name">POST /webhook/scan</div>
+          <div class="flow-sub">findings[ ] array</div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-box">
+          <div class="flow-label">GitHub API</div>
+          <div class="flow-name">Fetch issue</div>
+          <div class="flow-sub">title + body → prompt</div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-box devin-box">
+          <div class="flow-label">Devin API v3</div>
+          <div class="flow-name">Create session</div>
+          <div class="flow-sub">+ playbook + knowledge</div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-box devin-box">
+          <div class="flow-label">Devin agent</div>
+          <div class="flow-name">Observe → Plan → Act → Verify</div>
+          <div class="flow-sub">clones repo, edits, runs tests</div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-box">
+          <div class="flow-label">Output</div>
+          <div class="flow-name">Pull request</div>
+          <div class="flow-sub">tests passing, Fixes #N</div>
+        </div>
+      </div>
+
+      <!-- ROW 2: Primitives -->
+      <div class="primitives">
+
+        <div class="prim">
+          <div class="prim-name">Playbook</div>
+          <div class="prim-tag">playbook_id → every session</div>
+          <p>7-step standard procedure enforced at the session level — not the prompt.
+          <strong>Cannot open a PR if tests are failing.</strong>
+          All future sessions inherit it without touching pipeline code.</p>
+        </div>
+
+        <div class="prim">
+          <div class="prim-name">Knowledge</div>
+          <div class="prim-tag">knowledge_ids → retrieved semantically</div>
+          <p>Persistent codebase context: where tests live, which type-checking pattern this repo uses, formatting rules.
+          <strong>Each note makes every future session smarter</strong> — the system compounds.</p>
+        </div>
+
+        <div class="prim">
+          <div class="prim-name">Schedule</div>
+          <div class="prim-tag">cron: "0 6 * * 1"</div>
+          <p>Registered on first boot via API. Every Monday 06:00 UTC, Devin scans for new findings and opens issues automatically. <strong>Proactive, not just reactive.</strong></p>
+        </div>
+
+        <div class="prim">
+          <div class="prim-name">Metrics API</div>
+          <div class="prim-tag">/metrics/sessions + /metrics/prs</div>
+          <p>Dashboard analytics strip calls Devin's org-level metrics API on every load.
+          Sessions created, PRs opened, PRs merged — <strong>live, not cached.</strong>
+          Session insights auto-categorise completed work.</p>
+        </div>
+
+      </div>
+
+      <!-- ROW 3: Bottom strip -->
+      <div class="bottom-strip">
+
+        <div class="strip-card">
+          <div class="strip-title tag-purple">The agent loop</div>
+          <div class="loop-steps">
+            <div class="loop-step">Observe</div>
+            <div class="loop-arrow">→</div>
+            <div class="loop-step">Plan</div>
+            <div class="loop-arrow">→</div>
+            <div class="loop-step">Act</div>
+            <div class="loop-arrow">→</div>
+            <div class="loop-step">Verify</div>
+            <div class="loop-arrow">↺</div>
+          </div>
+          <p style="margin-top:8px;">Devin isn't calling a function to edit a file — it's <strong>operating the computer like a human would.</strong> Reading issues, navigating the repo, running tests, reading the output, iterating.</p>
+        </div>
+
+        <div class="strip-card">
+          <div class="strip-title tag-green">Not just bug fixes</div>
+          <p>Any describable task routes through this pipeline.
+          <strong>New API endpoints</strong> from a spec.
+          <strong>Database migrations.</strong>
+          <strong>New features</strong> from a ticket.
+          The harness doesn't change — only what's in the issue.</p>
+        </div>
+
+        <div class="strip-card">
+          <div class="strip-title tag-blue">True parallelism</div>
+          <p>Human engineers context-switch — one task at a time, attention tax on every switch.
+          Cursor makes one engineer faster. <strong>This dispatches N engineers simultaneously</strong> — four findings, four sessions, four PRs in parallel. No routing, no assignment, no sprint planning.</p>
+        </div>
+
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════
+       SLIDE 2 — What's Next
+  ═══════════════════════════════════════════════════════════════ -->
+  <div class="slide">
+    <div class="eyebrow">Real customer engagement</div>
+    <h2>What's next</h2>
+
+    <div class="steps">
+
+      <div class="step">
+        <div class="step-num">01</div>
+        <div>
+          <div class="step-title">Auto-merge on green CI for low-risk categories</div>
+          <div class="step-body">Dependency upgrades and test additions are low blast radius. If CI is green and the change stays within the playbook's scope, merge automatically. Engineers only review feature-level changes. Cuts the PR review queue by ~40% in a mature pipeline.</div>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">02</div>
+        <div>
+          <div class="step-title">Connect real signal sources — close the loop end-to-end</div>
+          <div class="step-body">Snyk fires CVE alerts → webhook → Devin fixes it → PR merged before the daily standup. Coverage reporter drops below threshold → Devin writes the missing tests. APM flags a slow endpoint → Devin profiles and patches it. The pipeline is already generic. Swap the sender, not the receiver.</div>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">03</div>
+        <div>
+          <div class="step-title">Knowledge that compounds over time</div>
+          <div class="step-body">After each successful remediation, a new knowledge note: which file, which pattern, what the test for it looks like. Over time the knowledge base becomes a detailed map of the codebase's conventions. Devin's accuracy improves without touching pipeline code. New engineers onboard faster. The system gets smarter on its own.</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div><!-- /deck -->
+
+<div class="nav" id="nav"></div>
+<div class="counter" id="counter"></div>
+
+<script>
+  const slides = document.querySelectorAll('.slide');
+  let current = 0;
+  function go(n) {
+    slides[current].classList.remove('active');
+    current = (n + slides.length) % slides.length;
+    slides[current].classList.add('active');
+    document.querySelectorAll('.dot').forEach((d, i) => d.classList.toggle('active', i === current));
+    document.getElementById('counter').textContent = `${current + 1} / ${slides.length}`;
+  }
+  const nav = document.getElementById('nav');
+  slides.forEach((_, i) => {
+    const d = document.createElement('div');
+    d.className = 'dot' + (i === 0 ? ' active' : '');
+    d.onclick = () => go(i);
+    nav.appendChild(d);
+  });
+  document.getElementById('counter').textContent = `1 / 2`;
+  document.addEventListener('keydown', e => {
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === ' ') go(current + 1);
+    if (e.key === 'ArrowLeft'  || e.key === 'ArrowUp')                     go(current - 1);
+  });
+</script>
+</body>
+</html>

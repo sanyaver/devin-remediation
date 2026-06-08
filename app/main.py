@@ -157,17 +157,26 @@ async def receive_scan(request: Request):
 
 @app.post("/scan/trigger")
 async def trigger_scan():
-    """Demo trigger — fires the new security finding (issue #7).
-    Issues 1-3 are already remediated and shown as historical results."""
+    """Demo trigger — dispatches the performance finding (issue #3)."""
     async with httpx.AsyncClient() as client:
         r = await client.post(
             "http://localhost:8000/webhook/scan",
             json={"findings": [
-                {"issue_number": 7},
+                {"issue_number": 3},
             ]},
             timeout=30,
         )
     return r.json()
+
+@app.delete("/demo/reset")
+async def demo_reset():
+    """Wipe session rows for a clean demo run. Preserves playbook/knowledge/schedule config."""
+    import sqlite3
+    db_path = os.getenv("DB_PATH", "/app/data/sessions.db")
+    with sqlite3.connect(db_path) as conn:
+        deleted = conn.execute("DELETE FROM sessions").rowcount
+    active_polls.clear()
+    return {"deleted_sessions": deleted}
 
 @app.get("/api/sessions")
 async def api_sessions():
