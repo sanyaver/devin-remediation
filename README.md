@@ -53,7 +53,7 @@ POST /webhook/scan  ◄───────────────────
 |---|---|---|---|
 | [#1](https://github.com/sanyaver/superset/issues/1) | BUG | `extract_column_dtype()` misclassifies boolean columns as STRING | [PR #6](https://github.com/sanyaver/superset/pull/6) |
 | [#2](https://github.com/sanyaver/superset/issues/2) | TEST | `find_duplicates`, `remove_duplicates` etc. have no test coverage | [PR #4](https://github.com/sanyaver/superset/pull/4) |
-| [#3](https://github.com/sanyaver/superset/issues/3) | PERF | `get_time_grain_expressions()` recomputes on every chart request | [PR #5](https://github.com/sanyaver/superset/pull/5) |
+| [#3](https://github.com/sanyaver/superset/issues/3) | PERF | `get_time_grain_expressions()` recomputes on every chart request | [PR #5](https://github.com/sanyaver/superset/pull/5) (open) |
 
 ---
 
@@ -68,7 +68,7 @@ docker compose up
 | Endpoint | Description |
 |---|---|
 | `http://localhost:8000/dashboard` | Live remediation dashboard |
-| `POST /scan/trigger` | Fire all four issues simultaneously through the pipeline |
+| `POST /scan/trigger` | Dispatch issue #3 (PERF) through the pipeline as a live demo trigger |
 | `POST /webhook/scan` | Real webhook — body: `{"findings": [{"issue_number": N}]}` |
 | `DELETE /demo/reset` | Clear session rows for a fresh demo run (preserves org config) |
 | `GET /api/sessions` | Raw session data (JSON) |
